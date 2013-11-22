@@ -1,0 +1,79 @@
+- hosts: modx
+
+  vars:
+    site_name: modx.vagrant
+    modx_version: modx-2.2.10-pl
+    database_name: modx
+    database_user: modx
+    database_password: password
+
+  tasks:
+    - name: Install nginx web server
+      apt: pkg=nginx state=installed update_cache=true
+
+    - name: Install PHP fpm
+      apt: pkg=php5-fpm state=installed
+
+    - name: Set PHP.ini timezone
+      ini_file: dest=/etc/php5/fpm/php.ini
+                section=Date
+                option=date.timezone
+                value='America/Chicago'
+                backup=yes
+      notify:
+        - restart php5-fpm
+
+    - name: Install MySQL
+      apt: pkg=mysql-server state=installed
+
+    - name: Install MySQL PHP package
+      apt: pkg=php5-mysql
+      notify:
+        - restart php5-fpm
+
+    - name: Install MySQL Python package
+      apt: pkg=python-mysqldb
+
+    - name: Create the database
+      mysql_db: name={{ database_name }} state=present
+
+    - name: Create the database user
+      mysql_user: name={{ database_user }} password={{ database_password }} priv={{ database_name }}.*:ALL state=present
+
+    - name: Install wget
+      apt: pkg=wget state=installed
+
+    - name: Install zip
+      apt: pkg=zip state=installed
+
+    - name: Download Modx
+      shell: creates=/tmp/modx.zip
+             wget "http://modx.com/download/direct/{{ modx_version }}.zip" -O '/tmp/modx.zip'
+
+    - name: Make sure www directory exists
+      file: path=/var/www state=directory group=www-data owner=www-data recurse=yes
+
+    - name: Unzip Modx
+      shell: creates=/var/www/{{ modx_version }}
+             unzip /tmp/modx.zip -d /var/www
+
+    - name: Rename unzipped package
+      shell: creates=/var/www/{{ site_name }}
+             mv /var/www/{{ modx_version }} /var/www/{{ site_name }}
+
+    - name: Copy virtual host configuration
+      copy: src=files/nginx.conf dest=/etc/nginx/sites-enabled/ mode=0640
+      notify:
+        - restart nginx
+
+    - name: Verify directory permissions of newly created site dir
+      file: path=/var/www/{{ site_name }} state=directory group=www-data owner=www-data recurse=yes
+
+    - name: Make sure the config file exists
+      file: path=/var/www/{{ site_name }}/core/config/config.inc.php group=www-data owner=www-data state=touch
+
+  handlers:
+    - name: restart nginx
+      action: service name=nginx state=restarted enabled=yes
+    - name: restart php5-fpm
+      action: service name=php5-fpm state=restarted enabled=yes

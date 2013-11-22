@@ -1,0 +1,2 @@
+[modx]
+modx.vagrant ansible_ssh_host=33.33.33.10 ansible_ssh_user=root
